@@ -34,9 +34,9 @@
                   <template v-if="child.children">
                     <el-submenu :index="index + ''">
                       <template slot="title">{{ child.name }}</template>
-                      <el-menu-item v-for="grandson in child.children" :index="grandson.path" :key="grandson.path" v-show="!grandson.hidden" router="true" :route="grandson.path">{{
-                        grandson.name
-                      }}</el-menu-item>
+                      <el-menu-item v-for="grandson in child.children" :index="grandson.path" :key="grandson.path" v-show="!grandson.hidden" router="true" :route="grandson.path">
+                        {{ grandson.name }}
+                      </el-menu-item>
                     </el-submenu>
                   </template>
                   <el-menu-item :index="child.path" :key="child.path" v-show="!child.children">{{ child.name }}</el-menu-item>
@@ -79,15 +79,14 @@ export default class Home extends Vue {
   private sysUserName: string = "点我";
   private logoSrc: string = require("../../assets/logo.png");
   mounted() {
-    // console.log(this.$router);
-    // this.$axios
-    //   .post("/login")
-    //   .then((result: any) => {
-    //     console.log(result);
-    //   })
-    //   .catch((err: any) => {
-    //     console.log(err);
-    //   });
+    (this as any).$api.api
+      .login({})
+      .then((result: any) => {
+        console.log(result);
+      })
+      .catch((err: any) => {
+        console.log(err);
+      });
   }
   // methods
   private toPersonalCenter() {}
