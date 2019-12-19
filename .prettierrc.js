@@ -10,4 +10,4 @@ module.exports = {
   jsxBracketSameLine: true,
   arrowParens: "always",
   printWidth: 200
-};
+}
