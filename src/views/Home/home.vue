@@ -79,7 +79,9 @@ export default class Home extends Vue {
   private sysUserName: string = "点我";
   private logoSrc: string = require("../../assets/logo.png");
   mounted() {
-    (this as any).$api.api
+    console.log(this.$config.base_url);
+    console.log(this.$route);
+    this.$api.api
       .login({})
       .then((result: any) => {
         console.log(result);
