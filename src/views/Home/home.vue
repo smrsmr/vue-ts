@@ -1,234 +1,114 @@
 <template>
   <el-row class="container">
-    <el-col :span="24" class="header">
-      <el-col :span="10" class="logo" :class="collapsed ? 'logo-collapse-width' : 'logo-width'">
-        <img :src="logoSrc" alt />
-        <div>{{ collapsed ? "" : sysName }}</div>
-      </el-col>
-      <el-col :span="4" class="userinfo">
-        <el-dropdown trigger="hover">
-          <span class="el-dropdown-link userinfo-inner">
-            <!-- <img :src="this.sysUserAvatar" /> -->
-            {{ sysUserName }}
-          </span>
-          <el-dropdown-menu slot="dropdown" class="custom">
-            <el-dropdown-item @click.native="toPersonalCenter">我的消息</el-dropdown-item>
-            <!-- <el-dropdown-item>设置</el-dropdown-item> -->
-            <el-dropdown-item @click.native="logout">退出登录</el-dropdown-item>
-          </el-dropdown-menu>
-        </el-dropdown>
-      </el-col>
-    </el-col>
+    <admin-header></admin-header>
     <el-col :span="24" class="main">
       <aside :class="collapsed ? 'menu-collapsed' : 'menu-expanded'">
         <!--导航菜单-->
-        <el-menu :default-active="$route.path" class="el-menu-vertical-demo" @open="handleopen" @close="handleclose" @select="handleselect" unique-opened router v-show="!collapsed">
-          <template v-for="(item, index) in $router.options.routes">
-            <template v-if="!item.hidden">
-              <el-submenu :key="index" :index="index + ''" v-if="!item.leaf">
-                <template slot="title">
-                  <i :class="item.iconCls"></i>
-                  {{ item.name }}
-                </template>
-                <div v-for="(child, index) in item.children" :index="child.path" :key="child.path" v-show="!child.hidden">
+        <el-menu :default-active="$route.fullPath" :unique-opened="true" router v-show="!collapsed">
+          <template v-for="(item, index) in menuTree">
+            <template>
+              <el-submenu v-if="item.children" :key="index" :index="index + ''">
+                <template slot="title">{{ item.name }}</template>
+                <div v-for="(child, index) in item.children" :index="child.path" :key="child.path">
                   <template v-if="child.children">
                     <el-submenu :index="index + ''">
                       <template slot="title">{{ child.name }}</template>
-                      <el-menu-item v-for="grandson in child.children" :index="grandson.path" :key="grandson.path" v-show="!grandson.hidden" router="true" :route="grandson.path">
-                        {{ grandson.name }}
-                      </el-menu-item>
+                      <el-menu-item v-for="grandson in child.children" :index="`${grandson.path}?id=${grandson.id}`" :key="grandson.path">{{ grandson.name }}</el-menu-item>
                     </el-submenu>
                   </template>
-                  <el-menu-item :index="child.path" :key="child.path" v-show="!child.children">{{ child.name }}</el-menu-item>
+                  <el-menu-item :index="`${child.path}?id=${child.id}`" :key="child.path" v-if="!child.children">{{ child.name }}</el-menu-item>
                 </div>
               </el-submenu>
-              <el-menu-item v-if="item.leaf && item.children.length > 0" :key="index" :index="item.children[0].path">
-                <i :class="item.iconCls"></i>
-                {{ item.children[0].name }}
-              </el-menu-item>
+              <el-menu-item v-if="!item.children" :key="index" :index="item.path">{{ item.name }}</el-menu-item>
             </template>
           </template>
         </el-menu>
       </aside>
       <section class="content-container">
-        <div class="grid-content bg-purple-light">
-          <el-col :span="24" class="breadcrumb-container">
-            <strong class="title">{{ $route.name }}</strong>
-            <el-breadcrumb separator="/" class="breadcrumb-inner">
-              <el-breadcrumb-item v-for="item in $route.matched" :key="item.path">{{ item.name }}</el-breadcrumb-item>
-            </el-breadcrumb>
-          </el-col>
-          <el-col :span="24" class="content-wrapper">
-            <transition name="fade" mode="out-in">
-              <router-view></router-view>
-            </transition>
-          </el-col>
-        </div>
+        <el-col :span="24" class="breadcrumb-container">
+          <!-- <el-breadcrumb separator="/"
+                        class="breadcrumb-inner">
+            <el-breadcrumb-item v-for="item in $route.matched"
+                                :key="item.path">
+            {{ item.meta.title }}
+            </el-breadcrumb-item>
+        </el-breadcrumb> -->
+          <admin-breadcrumb></admin-breadcrumb>
+        </el-col>
+        <el-col :span="24" class="content-wrapper pad-t-30 pad-b-30">
+          <transition name="fade" mode="out-in">
+            <router-view></router-view>
+          </transition>
+        </el-col>
       </section>
     </el-col>
   </el-row>
 </template>
 
 <script lang="ts">
-import { Component, Vue } from "vue-property-decorator";
-@Component
+import { Component, Prop, Vue, Watch } from "vue-property-decorator";
+import AdminHeader from "../../components/AdminHeader.vue";
+import Breadcrumb from "../../components/Breadcrumb.vue";
+
+// declare function require(any): string;
+const sysUserAvatar = require("../../assets/images/common/user.png");
+@Component({
+  components: {
+    "admin-header": AdminHeader,
+    "admin-breadcrumb": Breadcrumb
+  }
+})
 export default class Home extends Vue {
-  // data
-  private sysName: string = "我是个人搭建的vue-cli+ts项目";
   private collapsed: boolean = false;
-  private sysUserName: string = "点我";
-  private logoSrc: string = require("../../assets/logo.png");
-  mounted() {
-    console.log(this.$config.base_url);
-    console.log(this.$route);
-    this.$api.api
-      .login({})
-      .then((result: any) => {
-        console.log(result);
+  private loading: boolean = false; //菜单loading
+  private menuTree: any = null; //过滤后的菜单树
+  private userId: number = 1;
+  //methods
+  created() {
+    this.getMenu();
+  }
+  //获取菜单
+  getMenu() {
+    let params: object = {
+      userId: this.userId
+    };
+    this.loading = true;
+    this.$api.authority
+      .findMenuZtree(params)
+      .then((res: any) => {
+        if (res.data.code === this.$config.RET_CODE.SUCCESS_CODE) {
+          this.menuTree = this.filterTree(res.data.data);
+          this.loading = false;
+        } else {
+          this.$message.error(res.data.msg);
+          this.loading = false;
+        }
       })
       .catch((err: any) => {
         console.log(err);
+        this.loading = false;
       });
   }
-  // methods
-  private toPersonalCenter() {}
-  private handleopen() {}
-  private handleclose() {}
-  private handleselect() {}
+
+  // 1、登录获取data菜单
+  // 2、第二步判断children的长度是否为0，如果为0就删除children这个属性，因为element菜单如果有children还会有下拉箭头
+  // 3、判断返回数据的type是否为1，如果为1，过滤掉该对象，因为0是菜单  1是按钮 ， 按钮不需要显示在菜单列表
+  // 4、赋值
+  //过滤树菜单按钮
+  filterTree(data: Array<object>) {
+    data.forEach((v: any) => {
+      v.children = v.children && v.children.filter((item: any) => item.type !== 1); //返回type不等于1 0是菜单 1是按钮
+
+      if (v.children && v.children.length) {
+        this.filterTree(v.children);
+      } else {
+        delete v.children;
+      }
+    });
+    return data;
+  }
 }
 </script>
-
 <style scoped lang="less">
-.el-menu-item,
-.el-submenu__title {
-  height: auto !important;
-}
-
-.container {
-  position: absolute;
-  top: 0px;
-  bottom: 0px;
-  width: 100%;
-  .header {
-    height: 60px;
-    line-height: 60px;
-    background: #263445;
-    color: #fff;
-    .userinfo {
-      text-align: right;
-      padding-right: 35px;
-      float: right;
-      .userinfo-inner {
-        cursor: pointer;
-        color: #fff;
-        img {
-          width: 40px;
-          height: 40px;
-          border-radius: 20px;
-          margin: 12px 0px 10px 10px;
-          float: right;
-        }
-      }
-    }
-    .logo {
-      //width:230px;
-      height: 60px;
-      font-size: 22px;
-      padding-left: 20px;
-      padding-right: 20px;
-      div {
-        float: left;
-      }
-      img {
-        float: left;
-        width: 92px;
-        height: 40px;
-        object-fit: contain;
-        padding-top: 10px;
-      }
-      .txt {
-        color: #fff;
-      }
-    }
-    .logo-collapse-width {
-      width: 60px;
-    }
-    .tools {
-      padding: 0px 23px;
-      width: 14px;
-      height: 60px;
-      line-height: 60px;
-      cursor: pointer;
-    }
-  }
-  .main {
-    display: flex;
-    position: absolute;
-    top: 60px;
-    bottom: 0px;
-    overflow: hidden;
-    background-color: white;
-    aside {
-      flex: 0 0 230px;
-      width: 230px;
-      .el-menu {
-        height: 100%;
-        overflow: auto;
-        background-color: #cccccc;
-      }
-      .collapsed {
-        width: 60px;
-        .item {
-          position: relative;
-        }
-        .submenu {
-          position: absolute;
-          top: 0px;
-          left: 60px;
-          z-index: 99999;
-          height: auto;
-          display: none;
-          background-color: #cccccc;
-        }
-      }
-    }
-    .menu-collapsed {
-      flex: 0 0 60px;
-      width: 60px;
-    }
-    .menu-expanded {
-      flex: 0 0 230px;
-      width: 230px;
-    }
-    .content-container {
-      flex: 1;
-      overflow-y: scroll;
-      padding: 20px;
-      .breadcrumb-container {
-        .title {
-          width: 200px;
-          float: left;
-          color: #475669;
-        }
-        .breadcrumb-inner {
-          font-size: 16px;
-          margin-bottom: 10px;
-        }
-      }
-      .content-wrapper {
-        background-color: #fff;
-        box-sizing: border-box;
-      }
-    }
-  }
-}
-.el-dropdown-menu {
-  background: rgb(48, 65, 86);
-  li {
-    color: rgb(191, 203, 217);
-    &:hover {
-      background: #263445 !important;
-    }
-  }
-}
+@import "../../assets/less/home.less";
 </style>
